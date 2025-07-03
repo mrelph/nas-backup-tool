@@ -172,6 +172,110 @@ namespace NASBackup
             }
         }
 
+        public async Task<BackupSimulationResult> SimulateBackupAsync(List<string> sourcePaths, string destinationPath, BackupConfig config)
+        {
+            var result = new BackupSimulationResult();
+            
+            try
+            {
+                OnStatusChanged("Running simulation...");
+                OnLogMessage("Starting backup simulation");
+
+                // Connect to NAS if credentials are provided (for path validation)
+                if (config.UseCredentials && !string.IsNullOrEmpty(config.NasServer))
+                {
+                    await ConnectWithCredentialsAsync(config.NasServer, config.Username, config.Password);
+                    OnLogMessage("Connected to NAS server for simulation");
+                }
+
+                foreach (var sourcePath in sourcePaths)
+                {
+                    await SimulateSinglePathAsync(sourcePath, destinationPath, result);
+                }
+
+                // Calculate estimated time (assume 50 MB/sec average transfer rate)
+                const long averageTransferRate = 50 * 1024 * 1024; // 50 MB/sec
+                result.EstimatedTime = TimeSpan.FromSeconds(Math.Max(1, result.SizeToTransfer / averageTransferRate));
+
+                OnStatusChanged($"Simulation complete: {result.FilesToCopy} files to copy");
+                OnLogMessage($"Simulation complete. {result.Summary}");
+                
+                return result;
+            }
+            catch (Exception ex)
+            {
+                OnLogMessage($"Simulation failed: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<BackupSimulationResult> SimulateBackupAsync(string sourcePath, string destinationPath, BackupConfig config)
+        {
+            return await SimulateBackupAsync(new List<string> { sourcePath }, destinationPath, config);
+        }
+
+        private async Task SimulateSinglePathAsync(string sourcePath, string destinationPath, BackupSimulationResult result)
+        {
+            if (!Directory.Exists(sourcePath))
+            {
+                OnLogMessage($"Warning: Source path does not exist: {sourcePath}");
+                return;
+            }
+
+            OnStatusChanged($"Analyzing: {sourcePath}");
+            
+            // Get all files to analyze
+            var files = await Task.Run(() => Directory.GetFiles(sourcePath, "*", SearchOption.AllDirectories));
+            
+            foreach (var sourceFile in files)
+            {
+                try
+                {
+                    var fileInfo = new System.IO.FileInfo(sourceFile);
+                    result.TotalFiles++;
+                    result.TotalSize += fileInfo.Length;
+
+                    var relativePath = Path.GetRelativePath(sourcePath, sourceFile);
+                    var destinationFile = Path.Combine(destinationPath, relativePath);
+
+                    // Check if file needs to be copied
+                    bool needsCopy = !File.Exists(destinationFile);
+                    if (!needsCopy && File.Exists(destinationFile))
+                    {
+                        var destInfo = new System.IO.FileInfo(destinationFile);
+                        needsCopy = fileInfo.LastWriteTime != destInfo.LastWriteTime || 
+                                   fileInfo.Length != destInfo.Length;
+                    }
+
+                    if (needsCopy)
+                    {
+                        result.FilesToCopy++;
+                        result.SizeToTransfer += fileInfo.Length;
+                        
+                        // Add sample files (limit to 10 for display)
+                        if (result.SampleFilesToCopy.Count < 10)
+                        {
+                            result.SampleFilesToCopy.Add(relativePath);
+                        }
+                    }
+                    else
+                    {
+                        result.FilesToSkip++;
+                        
+                        // Add sample skipped files (limit to 5 for display)
+                        if (result.SampleFilesToSkip.Count < 5)
+                        {
+                            result.SampleFilesToSkip.Add(relativePath);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    OnLogMessage($"Error analyzing {sourceFile}: {ex.Message}");
+                }
+            }
+        }
+
         private async Task ConnectWithCredentialsAsync(string server, string username, string password)
         {
             await Task.Run(() =>

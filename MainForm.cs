@@ -139,6 +139,7 @@ namespace NASBackup
         private TextBox destinationPathTextBox;
         private Button browseDestinationButton;
         private Button startBackupButton;
+        private Button simulateBackupButton;
         private ProgressBar backupProgressBar;
         private Label statusLabel;
         private RichTextBox logTextBox;
@@ -248,7 +249,10 @@ namespace NASBackup
             browseDestinationButton = CreateStyledButton("Browse", new Point(700, 255), new Size(120, 35), AccentBlue);
             
             // Action Section
-            startBackupButton = CreateStyledButton("🚀 Start Backup", new Point(30, 320), new Size(150, 45), SuccessGreen);
+            simulateBackupButton = CreateStyledButton("🔍 Simulate Backup", new Point(30, 320), new Size(150, 45), AccentBlue);
+            simulateBackupButton.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            
+            startBackupButton = CreateStyledButton("🚀 Start Backup", new Point(190, 320), new Size(150, 45), SuccessGreen);
             startBackupButton.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
             
             // Progress Section
@@ -281,7 +285,7 @@ namespace NASBackup
             backupTab.Controls.AddRange(new Control[] {
                 sourceLabel, sourcePathsListBox, addSourceButton, removeSourceButton,
                 destLabel, destinationPathTextBox, browseDestinationButton,
-                startBackupButton, backupProgressBar, statusLabel,
+                simulateBackupButton, startBackupButton, backupProgressBar, statusLabel,
                 logLabel, logTextBox
             });
         }
@@ -446,6 +450,7 @@ namespace NASBackup
             addSourceButton.Click += AddSourceButton_Click;
             removeSourceButton.Click += RemoveSourceButton_Click;
             browseDestinationButton.Click += BrowseDestinationButton_Click;
+            simulateBackupButton.Click += SimulateBackupButton_Click;
             startBackupButton.Click += StartBackupButton_Click;
             testConnectionButton.Click += TestConnectionButton_Click;
             useCredentialsCheckBox.CheckedChanged += UseCredentialsCheckBox_CheckedChanged;
@@ -560,6 +565,115 @@ namespace NASBackup
                     SaveConfiguration();
                 }
             }
+        }
+
+        private async void SimulateBackupButton_Click(object sender, EventArgs e)
+        {
+            if (sourcePathsListBox.Items.Count == 0 || string.IsNullOrEmpty(destinationPathTextBox.Text))
+            {
+                MessageBox.Show("Please select source and destination paths.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            simulateBackupButton.Enabled = false;
+            backupProgressBar.Value = 0;
+            logTextBox.Clear();
+
+            try
+            {
+                var sourcePaths = sourcePathsListBox.Items.Cast<string>().ToList();
+                var result = await backupEngine.SimulateBackupAsync(sourcePaths, destinationPathTextBox.Text, config);
+                
+                ShowSimulationResults(result);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Simulation failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                simulateBackupButton.Enabled = true;
+            }
+        }
+
+        private void ShowSimulationResults(BackupSimulationResult result)
+        {
+            var message = new System.Text.StringBuilder();
+            message.AppendLine("🔍 BACKUP SIMULATION RESULTS");
+            message.AppendLine(new string('=', 40));
+            message.AppendLine();
+            message.AppendLine($"📊 SUMMARY:");
+            message.AppendLine($"   • Total files: {result.TotalFiles:N0}");
+            message.AppendLine($"   • Files to copy: {result.FilesToCopy:N0}");
+            message.AppendLine($"   • Files to skip: {result.FilesToSkip:N0}");
+            message.AppendLine($"   • Total size: {FormatBytes(result.TotalSize)}");
+            message.AppendLine($"   • Size to transfer: {FormatBytes(result.SizeToTransfer)}");
+            message.AppendLine($"   • Estimated time: {result.EstimatedTime:mm\\:ss}");
+            message.AppendLine();
+            
+            if (result.SampleFilesToCopy.Any())
+            {
+                message.AppendLine($"📁 SAMPLE FILES TO COPY:");
+                foreach (var file in result.SampleFilesToCopy)
+                {
+                    message.AppendLine($"   • {file}");
+                }
+                if (result.FilesToCopy > result.SampleFilesToCopy.Count)
+                {
+                    message.AppendLine($"   ... and {result.FilesToCopy - result.SampleFilesToCopy.Count} more");
+                }
+                message.AppendLine();
+            }
+            
+            if (result.SampleFilesToSkip.Any())
+            {
+                message.AppendLine($"⏭️ SAMPLE FILES TO SKIP (already up-to-date):");
+                foreach (var file in result.SampleFilesToSkip)
+                {
+                    message.AppendLine($"   • {file}");
+                }
+                if (result.FilesToSkip > result.SampleFilesToSkip.Count)
+                {
+                    message.AppendLine($"   ... and {result.FilesToSkip - result.SampleFilesToSkip.Count} more");
+                }
+            }
+
+            var form = new Form
+            {
+                Text = "Backup Simulation Results",
+                Size = new Size(600, 500),
+                StartPosition = FormStartPosition.CenterParent,
+                BackColor = DarkBackground,
+                ForeColor = TextPrimary,
+                Font = new Font("Segoe UI", 9F)
+            };
+
+            var textBox = new RichTextBox
+            {
+                Text = message.ToString(),
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                BackColor = LightBackground,
+                ForeColor = TextPrimary,
+                Font = new Font("Consolas", 9F),
+                Margin = new Padding(10)
+            };
+
+            var panel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(10),
+                BackColor = DarkBackground
+            };
+
+            var okButton = CreateStyledButton("✅ Ready to Backup", new Point(10, 10), new Size(150, 35), SuccessGreen);
+            okButton.Dock = DockStyle.Bottom;
+            okButton.Click += (s, e) => form.Close();
+
+            panel.Controls.Add(textBox);
+            panel.Controls.Add(okButton);
+            form.Controls.Add(panel);
+            form.ShowDialog(this);
         }
 
         private async void StartBackupButton_Click(object sender, EventArgs e)
