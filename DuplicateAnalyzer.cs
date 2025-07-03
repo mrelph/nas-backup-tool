@@ -32,7 +32,7 @@ namespace NASBackup
         public string RecommendedAction { get; set; } = "";
     }
 
-    public class DuplicateAnalyzer
+    public class DuplicateAnalyzer : IDisposable
     {
         public event EventHandler<string> ProgressChanged;
         public event EventHandler<string> LogMessage;

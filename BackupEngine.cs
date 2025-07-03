@@ -195,7 +195,14 @@ namespace NASBackup
 
                 // Calculate estimated time (assume 50 MB/sec average transfer rate)
                 const long averageTransferRate = 50 * 1024 * 1024; // 50 MB/sec
-                result.EstimatedTime = TimeSpan.FromSeconds(Math.Max(1, result.SizeToTransfer / averageTransferRate));
+                if (result.SizeToTransfer > 0)
+                {
+                    result.EstimatedTime = TimeSpan.FromSeconds(Math.Max(1, result.SizeToTransfer / (double)averageTransferRate));
+                }
+                else
+                {
+                    result.EstimatedTime = TimeSpan.Zero;
+                }
 
                 OnStatusChanged($"Simulation complete: {result.FilesToCopy} files to copy");
                 OnLogMessage($"Simulation complete. {result.Summary}");
@@ -240,7 +247,7 @@ namespace NASBackup
 
                     // Check if file needs to be copied
                     bool needsCopy = !File.Exists(destinationFile);
-                    if (!needsCopy && File.Exists(destinationFile))
+                    if (!needsCopy)
                     {
                         var destInfo = new System.IO.FileInfo(destinationFile);
                         needsCopy = fileInfo.LastWriteTime != destInfo.LastWriteTime || 
@@ -329,11 +336,13 @@ namespace NASBackup
 
         private string FormatBytes(long bytes)
         {
+            if (bytes == 0) return "0 B";
+            
             string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
             int counter = 0;
             decimal number = bytes;
             
-            while (Math.Round(number / 1024) >= 1)
+            while (Math.Round(number / 1024) >= 1 && counter < suffixes.Length - 1)
             {
                 number = number / 1024;
                 counter++;
