@@ -45,7 +45,7 @@ namespace NASBackup
                     
                     // Load sensitive data from secure storage
                     config.Password = LoadPasswordFromSecureStorage(config.Username);
-                    config.AwsSecretKey = LoadPasswordFromSecureStorage($\"aws_secret_{config.AwsAccessKey}\");
+                    config.AwsSecretKey = LoadPasswordFromSecureStorage($"aws_secret_{config.AwsAccessKey}");
                     
                     return config;
                 }
@@ -71,7 +71,7 @@ namespace NASBackup
 
                 // Save sensitive data to secure storage
                 SavePasswordToSecureStorage(Username, Password);
-                SavePasswordToSecureStorage($\"aws_secret_{AwsAccessKey}\", AwsSecretKey);
+                SavePasswordToSecureStorage($"aws_secret_{AwsAccessKey}", AwsSecretKey);
 
                 var options = new JsonSerializerOptions
                 {
